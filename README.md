@@ -1,9 +1,6 @@
 <div align="center">
 
 # 🚀 VayDNS Easy Deploy
-
-**One-script automated deployment for a [VayDNS](https://github.com/net2share/vaydns) tunnel server — persistent systemd services, iptables port forwarding, and SSH SOCKS5 proxy support, all from a single interactive script.**
-
 [![Shell Script](https://img.shields.io/badge/shell-bash-89e051?style=flat-square&logo=gnubash&logoColor=white)](https://www.gnu.org/software/bash/)
 [![Platform](https://img.shields.io/badge/platform-Ubuntu%20%2F%20Debian-E95420?style=flat-square&logo=ubuntu&logoColor=white)](https://ubuntu.com/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
