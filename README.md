@@ -100,14 +100,7 @@ Add these two records at your domain registrar **before** running the script:
 ## ⚡ Quick Start
 
 ```bash
-# Download
-curl -O https://raw.githubusercontent.com/sodas-cheddar/vaydns-deploy/main/deploy-vaydns.sh
-
-# Make executable
-chmod +x deploy-vaydns.sh
-
-# Run as root
-sudo ./deploy-vaydns.sh
+bash <(curl -Ls https://raw.githubusercontent.com/sodas-cheddar/vaydns-deploy/main/deploy-vaydns.sh)
 ```
 
 The script will prompt you for:
