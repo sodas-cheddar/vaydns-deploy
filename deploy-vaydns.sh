@@ -78,10 +78,14 @@ show_client_commands() {
         echo ""
         echo -e "  ${YELLOW}⚡ Tip: DoH gives better throughput than UDP — prefer it when available.${RESET}"
         echo ""
-        echo -e "  ${CYAN}# Step 1 — run vaydns-client (pick one transport):${RESET}"
-        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
-        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
-        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
+        echo -e "  ${CYAN}# DNS over HTTPS (recommended):${RESET}"
+        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
+        echo ""
+        echo -e "  ${CYAN}# DNS over TLS:${RESET}"
+        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
+        echo ""
+        echo -e "  ${CYAN}# UDP (may be rate-limited by public resolvers):${RESET}"
+        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
         echo ""
         echo -e "  ${CYAN}# Step 2 — SSH SOCKS5 through the tunnel (enter your VPS password when prompted):${RESET}"
         echo -e "  ssh -N -D 127.0.0.1:7000 -p 8000 root@127.0.0.1"
@@ -350,7 +354,7 @@ fi
 banner "VayDNS Server Deploy Script"
 echo -e "You will need a domain with an ${BOLD}NS record${RESET} pointing to this server."
 echo -e "  ${YELLOW}A    tns.example.com  →  <server IP>${RESET}"
-echo -e "  ${YELLOW}NS   t.example.com   →  tns.example.com${RESET}"
+echo -e "  ${YELLOW}NS   t.example.com    →  tns.example.com${RESET}"
 echo ""
 echo -e "Press ${BOLD}Enter${RESET} to continue or ${BOLD}Ctrl-C${RESET} to abort."
 read -r
@@ -397,7 +401,8 @@ echo -e "  Listen port   : ${YELLOW}${LISTEN_PORT} (iptables 53 → ${LISTEN_POR
 echo -e "  Interface     : ${YELLOW}${NET_IFACE}${RESET}"
 echo -e "  MTU           : ${YELLOW}${SERVER_MTU}${RESET}"
 echo ""
-read -rp "$(echo -e "${BOLD}Looks good? [y/N]${RESET}: ")" CONFIRM
+read -rp "$(echo -e "${BOLD}Looks good? [Y/n]${RESET}: ")" CONFIRM
+CONFIRM=${CONFIRM:-y}
 [[ "${CONFIRM,,}" == "y" ]] || { info "Aborted."; exit 0; }
 
 banner "Installing dependencies"
