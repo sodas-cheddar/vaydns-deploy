@@ -58,15 +58,10 @@ The tunnel forwards directly to SSH on port 22. Each client establishes their ow
 
 ```bash
 # Step 1 — start the tunnel
-vaydns-client -udp 8.8.8.8:53 \
-  -pubkey <server-pubkey> \
-  -domain t.example.com \
-  -listen 127.0.0.1:8000
+vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:8000
 
 # Step 2 — open a private SOCKS5 proxy through the tunnel
-ssh -N -D 127.0.0.1:7000 \
-  -o HostKeyAlias=vaydns-tunnel \
-  -p 8000 127.0.0.1
+ssh -N -D 127.0.0.1:7000 -p 8000 root@127.0.0.1
 ```
 
 Point your browser at `SOCKS5  127.0.0.1:7000`.
