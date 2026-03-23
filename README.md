@@ -40,10 +40,7 @@ The server runs `ssh -N -D` as its own systemd service. The VayDNS tunnel points
 
 ```bash
 # Client — one command, proxy ready on :7000
-vaydns-client -udp 8.8.8.8:53 \
-  -pubkey <server-pubkey> \
-  -domain t.example.com \
-  -listen 127.0.0.1:7000
+vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:7000
 ```
 
 Point your browser at `SOCKS5  127.0.0.1:7000` and you're done.
