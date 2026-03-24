@@ -8,7 +8,7 @@
 <br/>
 
 > **This script automates the deployment of [VayDNS](https://github.com/net2share/vaydns)** — a DNS tunnel server written by [net2share](https://github.com/net2share), itself based on [dnstt](https://www.bamsoftware.com/software/dnstt/) by David Fifield.  
-> This repo contains only the installer script. VayDNS source code is cloned and compiled from the original repository at install time.
+> This repo contains only the installer script. VayDNS is either downloaded as a prebuilt binary or cloned and compiled from the original repository at install time.
 
 </div>
 
@@ -20,11 +20,10 @@ Instead of manually installing Go, building binaries, configuring iptables, and 
 
 | Step | What happens |
 |------|-------------|
-| 📦 | Installs Go automatically (detects architecture: amd64 / arm64 / armv6) |
-| 🔨 | Clones [net2share/vaydns](https://github.com/net2share/vaydns) and builds `vaydns-server` from source |
+| 📦 | Downloads a prebuilt binary **or** installs Go and builds from source (your choice) |
 | 🔑 | Generates a Noise protocol keypair |
 | 🔀 | Configures `iptables` to redirect UDP port `53 → 5300` (no root daemon needed) |
-| 💾 | Persists iptables rules across reboots via `netfilter-persistent` or a restore service |
+| 💾 | Persists iptables rules across reboots via `netfilter-persistent` |
 | ⚙️ | Creates and enables a `systemd` service that starts on boot |
 | 🚀 | Starts everything immediately and confirms it's running |
 
@@ -40,7 +39,7 @@ The server runs `ssh -N -D` as its own systemd service. The VayDNS tunnel points
 
 ```bash
 # Client — one command, proxy ready on :7000
-vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:7000
+vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:7000
 ```
 
 Point your browser at `SOCKS5  127.0.0.1:7000` and you're done.
@@ -55,7 +54,7 @@ The tunnel forwards directly to SSH on port 22. Each client establishes their ow
 
 ```bash
 # Step 1 — start the tunnel
-vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:8000
+vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:8000
 
 # Step 2 — open a private SOCKS5 proxy through the tunnel
 ssh -N -D 127.0.0.1:7000 -p 8000 root@127.0.0.1
@@ -83,7 +82,6 @@ Add these two records at your domain registrar **before** running the script:
 
 - `t` is the tunnel subdomain — **keep it short (max 2 characters)** to maximise payload per DNS query
 
-
 ---
 
 ## ⚡ Quick Start
@@ -95,9 +93,10 @@ bash <(curl -Ls https://raw.githubusercontent.com/sodas-cheddar/vaydns-deploy/ma
 The script will prompt you for:
 
 - Tunnel subdomain (e.g. `t.example.com`)
+- Tunnel mode (`1` = server-side SOCKS, `2` = client-side SOCKS)
+- Installation method (`1` = prebuilt binary, `2` = build from source)
 - Network interface (auto-detected from default route)
 - Response MTU (default `1232`, safe max `1452`)
-- Tunnel mode (`1` = server-side SOCKS, `2` = client-side SOCKS)
 
 At the end it prints your **public key**, the exact **DNS records** to add, and ready-to-paste **client commands**.
 
@@ -117,9 +116,11 @@ go build -o vaydns-client ./vaydns-client
 
 | Flag | Transport | Covertness |
 |------|-----------|------------|
-| `-udp 8.8.8.8:53` | Plaintext UDP DNS | ❌ Visible on network |
 | `-doh https://cloudflare-dns.com/dns-query` | DNS over HTTPS | ✅ Looks like normal HTTPS |
 | `-dot 1.1.1.1:853` | DNS over TLS | ✅ Looks like normal TLS |
+| `-udp 8.8.8.8:53` | Plaintext UDP DNS | ❌ Visible on network |
+
+> ⚡ **DoH gives better throughput than UDP** — prefer it when available. UDP DNS can be rate-limited by public resolvers under sustained load.
 
 ### Browser Proxy Configuration
 
@@ -145,24 +146,47 @@ curl --proxy socks5h://127.0.0.1:7000/ https://wtfismyip.com/text
 
 ## 🔧 Server Management
 
-```bash
-# Tunnel status
-systemctl status vaydns
+Re-running the script on an already-installed server opens an interactive management menu:
 
-# SSH SOCKS5 status (mode 1 only)
-systemctl status vaydns-socks
+```
+══════════════════════════════════════════
+  VayDNS Management
+══════════════════════════════════════════
 
-# Restart
-systemctl restart vaydns
+  Domain  : t.example.com
+  Mode    : Mode 1 — Server-side SOCKS
+  Binary  : Prebuilt release
+  Service : active
 
-# Live logs
-journalctl -u vaydns -f
-
-# Show public key
-cat /opt/vaydns/keys/server.pub
+  1) Show client connection commands
+  2) Switch tunnel mode
+  3) Change domain
+  4) Show service status
+  5) Update VayDNS
+  6) Uninstall
+  7) Exit
 ```
 
-Configuration is stored at `/opt/vaydns/vaydns.conf`. Re-running the script is safe — it skips steps that are already done (existing keypair, existing repo clone).
+| Option | Description |
+|--------|-------------|
+| **Show client commands** | Reprints public key, DNS records, and all client commands |
+| **Switch tunnel mode** | Toggles between Mode 1 and Mode 2 — restarts everything cleanly |
+| **Change domain** | Updates the tunnel domain and restarts the service |
+| **Show service status** | Runs `systemctl status` for vaydns (and vaydns-socks in Mode 1) |
+| **Update VayDNS** | Re-downloads the latest prebuilt binary, or pulls and rebuilds from source — whichever method was used at install time |
+| **Uninstall** | Stops services, removes iptables rules, deletes all files |
+
+### Manual commands
+
+```bash
+systemctl status vaydns          # tunnel status
+systemctl status vaydns-socks    # SSH SOCKS5 status (mode 1 only)
+systemctl restart vaydns         # restart tunnel
+journalctl -u vaydns -f          # live logs
+cat /opt/vaydns/keys/server.pub  # show public key
+```
+
+Configuration is stored at `/opt/vaydns/vaydns.conf`.
 
 ---
 
@@ -210,7 +234,7 @@ vaydns-deploy/
 └── LICENSE             ← MIT
 ```
 
-VayDNS itself is not included — it is cloned from [net2share/vaydns](https://github.com/net2share/vaydns) at install time.
+VayDNS itself is not included — it is either downloaded as a prebuilt binary from the [releases page](https://github.com/net2share/vaydns/releases) or cloned and compiled from [net2share/vaydns](https://github.com/net2share/vaydns) at install time.
 
 ---
 
@@ -222,4 +246,3 @@ This project would not exist without:
 - **[dnstt](https://www.bamsoftware.com/software/dnstt/)** by [David Fifield](https://www.bamsoftware.com/) — the upstream project VayDNS is based on. Also public domain.
 
 The `deploy-vaydns.sh` script in this repository is original work released under the [MIT License](LICENSE).
-
