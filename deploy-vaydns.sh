@@ -78,14 +78,10 @@ show_client_commands() {
         echo ""
         echo -e "  ${YELLOW}⚡ Tip: DoH gives better throughput than UDP — prefer it when available.${RESET}"
         echo ""
-        echo -e "  ${CYAN}# DNS over HTTPS (recommended):${RESET}"
-        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
-        echo ""
-        echo -e "  ${CYAN}# DNS over TLS:${RESET}"
-        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
-        echo ""
-        echo -e "  ${CYAN}# UDP (may be rate-limited by public resolvers):${RESET}"
-        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
+        echo -e "  ${CYAN}# Step 1 — run vaydns-client (pick one transport):${RESET}"
+        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
+        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
+        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
         echo ""
         echo -e "  ${CYAN}# Step 2 — SSH SOCKS5 through the tunnel (enter your VPS password when prompted):${RESET}"
         echo -e "  ssh -N -D 127.0.0.1:7000 -p 8000 root@127.0.0.1"
@@ -111,13 +107,14 @@ management_menu() {
         banner "VayDNS Management"
         echo -e "  ${BOLD}Domain  :${RESET} ${TUNNEL_DOMAIN:-unknown}"
         echo -e "  ${BOLD}Mode    :${RESET} $([ "${TUNNEL_MODE:-1}" -eq 1 ] && echo 'Mode 1 — Server-side SOCKS' || echo 'Mode 2 — Client-side SOCKS (SSH)')"
+        echo -e "  ${BOLD}Binary  :${RESET} $([ "${INSTALL_METHOD:-prebuilt}" = "prebuilt" ] && echo 'Prebuilt release' || echo 'Built from source')"
         echo -e "  ${BOLD}Service :${RESET} $(systemctl is-active vaydns 2>/dev/null || echo 'unknown')"
         echo ""
         echo -e "  1) Show client connection commands"
         echo -e "  2) Switch tunnel mode"
         echo -e "  3) Change domain"
         echo -e "  4) Show service status"
-        echo -e "  5) Update VayDNS (pull & rebuild)"
+        echo -e "  5) Update VayDNS"
         echo -e "  6) Uninstall"
         echo -e "  7) Exit"
         echo ""
@@ -202,13 +199,18 @@ change_domain() {
 }
 
 update_vaydns() {
+    load_config
     banner "Updating VayDNS"
-    export PATH="/usr/local/go/bin:$PATH"
-    info "Pulling latest source..."
-    git -C "$INSTALL_DIR/src" pull --ff-only
-    info "Rebuilding..."
-    cd "$INSTALL_DIR/src"
-    go build -o "$INSTALL_DIR/vaydns-server" ./vaydns-server
+    if [[ "${INSTALL_METHOD:-prebuilt}" == "prebuilt" ]]; then
+        install_prebuilt
+    else
+        export PATH="/usr/local/go/bin:$PATH"
+        info "Pulling latest source..."
+        git -C "$INSTALL_DIR/src" pull --ff-only
+        info "Rebuilding..."
+        cd "$INSTALL_DIR/src"
+        go build -o "$INSTALL_DIR/vaydns-server" ./vaydns-server
+    fi
     systemctl restart vaydns
     ok "Updated and restarted."
 }
@@ -229,6 +231,54 @@ uninstall_vaydns() {
     command -v netfilter-persistent &>/dev/null && netfilter-persistent save || true
     rm -rf "$INSTALL_DIR"
     ok "VayDNS uninstalled."
+}
+
+# ── Prebuilt binary download ──────────────────────────────────────────────────
+
+install_prebuilt() {
+    banner "Downloading prebuilt VayDNS binary"
+    mkdir -p "$INSTALL_DIR"
+
+    local arch
+    case "$(uname -m)" in
+        x86_64)        arch="linux-amd64"  ;;
+        aarch64|arm64) arch="linux-arm64"  ;;
+        armv6l|armv7l) arch="linux-armv6"  ;;
+        i386|i686)     arch="linux-386"    ;;
+        *) die "No prebuilt binary for architecture: $(uname -m). Use build from source instead." ;;
+    esac
+
+    info "Detected architecture: ${arch}"
+    info "Fetching latest release info from GitHub..."
+
+    local latest_tag
+    latest_tag=$(curl -fsSL "https://api.github.com/repos/net2share/vaydns/releases/latest" \
+        | grep '"tag_name"' | head -1 | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+    [[ -n "$latest_tag" ]] || die "Could not fetch latest release tag from GitHub API."
+
+    local asset="vaydns-server-${arch}"
+    local url="https://github.com/net2share/vaydns/releases/download/${latest_tag}/${asset}"
+
+    info "Downloading ${asset} (${latest_tag})..."
+    curl -fsSL "$url" -o "$INSTALL_DIR/vaydns-server"
+    chmod +x "$INSTALL_DIR/vaydns-server"
+
+    # Verify checksum if available
+    if curl -fsSL "${url}.sha256" -o /tmp/vaydns-server.sha256 2>/dev/null; then
+        local expected actual
+        expected=$(awk '{print $1}' /tmp/vaydns-server.sha256)
+        actual=$(sha256sum "$INSTALL_DIR/vaydns-server" | awk '{print $1}')
+        rm -f /tmp/vaydns-server.sha256
+        if [[ "$expected" == "$actual" ]]; then
+            ok "Checksum verified ✓"
+        else
+            die "Checksum mismatch! Expected ${expected}, got ${actual}. Aborting."
+        fi
+    else
+        warn "Could not fetch checksum file — skipping verification."
+    fi
+
+    ok "Downloaded vaydns-server ${latest_tag} → ${INSTALL_DIR}/vaydns-server"
 }
 
 # ── SSH SOCKS5 setup (mode 1) ─────────────────────────────────────────────────
@@ -279,12 +329,11 @@ EOF
         info "SSH config entry already present"
     fi
 
-    # Ensure sshd allows pubkey auth and root login
+    # Ensure sshd allows pubkey auth, root login, and TCP forwarding
     sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
     grep -q "^PubkeyAuthentication" /etc/ssh/sshd_config || echo "PubkeyAuthentication yes" >> /etc/ssh/sshd_config
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
     grep -q "^PermitRootLogin" /etc/ssh/sshd_config || echo "PermitRootLogin yes" >> /etc/ssh/sshd_config
-    # AllowTcpForwarding must be yes or the SOCKS5 proxy cannot open outbound connections
     sed -i 's/^#\?AllowTcpForwarding.*/AllowTcpForwarding yes/' /etc/ssh/sshd_config
     grep -q "^AllowTcpForwarding" /etc/ssh/sshd_config || echo "AllowTcpForwarding yes" >> /etc/ssh/sshd_config
     systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
@@ -383,6 +432,21 @@ case "$TUNNEL_MODE" in
     *) TUNNEL_MODE=1; UPSTREAM="127.0.0.1:8000" ;;
 esac
 
+echo ""
+echo -e "${BOLD}Installation method:${RESET}"
+echo ""
+echo -e "  ${CYAN}1) Download prebuilt binary${RESET} — fast, no Go required."
+echo -e "     Fetches the latest official release from GitHub for your architecture."
+echo ""
+echo -e "  ${CYAN}2) Build from source${RESET} — compiles latest code directly."
+echo -e "     Requires Go (installed automatically if missing)."
+echo ""
+read -rp "$(echo -e "${BOLD}Method [1/2]${RESET} (default: 1): ")" INSTALL_METHOD_CHOICE
+case "${INSTALL_METHOD_CHOICE:-1}" in
+    2) INSTALL_METHOD="build"    ;;
+    *) INSTALL_METHOD="prebuilt" ;;
+esac
+
 DEFAULT_IFACE=$(ip route show default 2>/dev/null | awk '/default/ {print $5; exit}')
 DEFAULT_IFACE="${DEFAULT_IFACE:-eth0}"
 echo ""
@@ -395,11 +459,12 @@ SERVER_MTU="${SERVER_MTU:-1232}"
 
 echo ""
 echo -e "${BOLD}Summary${RESET}"
-echo -e "  Tunnel domain : ${YELLOW}${TUNNEL_DOMAIN}${RESET}"
-echo -e "  Mode          : ${YELLOW}$([ "$TUNNEL_MODE" -eq 1 ] && echo 'Mode 1 — Server-side SOCKS' || echo 'Mode 2 — Client-side SOCKS')${RESET}"
-echo -e "  Listen port   : ${YELLOW}${LISTEN_PORT} (iptables 53 → ${LISTEN_PORT})${RESET}"
-echo -e "  Interface     : ${YELLOW}${NET_IFACE}${RESET}"
-echo -e "  MTU           : ${YELLOW}${SERVER_MTU}${RESET}"
+echo -e "  Tunnel domain  : ${YELLOW}${TUNNEL_DOMAIN}${RESET}"
+echo -e "  Mode           : ${YELLOW}$([ "$TUNNEL_MODE" -eq 1 ] && echo 'Mode 1 — Server-side SOCKS' || echo 'Mode 2 — Client-side SOCKS')${RESET}"
+echo -e "  Install method : ${YELLOW}$([ "$INSTALL_METHOD" = "prebuilt" ] && echo 'Prebuilt binary (latest release)' || echo 'Build from source')${RESET}"
+echo -e "  Listen port    : ${YELLOW}${LISTEN_PORT} (iptables 53 → ${LISTEN_PORT})${RESET}"
+echo -e "  Interface      : ${YELLOW}${NET_IFACE}${RESET}"
+echo -e "  MTU            : ${YELLOW}${SERVER_MTU}${RESET}"
 echo ""
 read -rp "$(echo -e "${BOLD}Looks good? [Y/n]${RESET}: ")" CONFIRM
 CONFIRM=${CONFIRM:-y}
@@ -412,52 +477,56 @@ apt-get install -y -qq git curl wget openssh-client \
     apt-get install -y -qq git curl wget openssh-client iptables || true
 ok "System packages ready"
 
-banner "Go toolchain"
-GO_MIN_MAJOR=1; GO_MIN_MINOR=21
-need_go=false
-if command -v go &>/dev/null; then
-    GO_VER=$(go version | grep -oP '\d+\.\d+' | head -1)
-    GO_MAJ=$(echo "$GO_VER" | cut -d. -f1)
-    GO_MIN_V=$(echo "$GO_VER" | cut -d. -f2)
-    if (( GO_MAJ > GO_MIN_MAJOR || (GO_MAJ == GO_MIN_MAJOR && GO_MIN_V >= GO_MIN_MINOR) )); then
-        ok "Go ${GO_VER} already installed"
+if [[ "$INSTALL_METHOD" == "prebuilt" ]]; then
+    install_prebuilt
+else
+    banner "Go toolchain"
+    GO_MIN_MAJOR=1; GO_MIN_MINOR=21
+    need_go=false
+    if command -v go &>/dev/null; then
+        GO_VER=$(go version | grep -oP '\d+\.\d+' | head -1)
+        GO_MAJ=$(echo "$GO_VER" | cut -d. -f1)
+        GO_MIN_V=$(echo "$GO_VER" | cut -d. -f2)
+        if (( GO_MAJ > GO_MIN_MAJOR || (GO_MAJ == GO_MIN_MAJOR && GO_MIN_V >= GO_MIN_MINOR) )); then
+            ok "Go ${GO_VER} already installed"
+        else
+            warn "Go ${GO_VER} too old. Upgrading."; need_go=true
+        fi
     else
-        warn "Go ${GO_VER} too old. Upgrading."; need_go=true
+        info "Go not found. Installing..."; need_go=true
     fi
-else
-    info "Go not found. Installing..."; need_go=true
-fi
 
-if $need_go; then
-    GO_LATEST=$(curl -fsSL "https://go.dev/VERSION?m=text" | head -1)
-    ARCH=$(uname -m)
-    case "$ARCH" in
-        x86_64)  GO_ARCH="amd64" ;;
-        aarch64) GO_ARCH="arm64" ;;
-        armv*)   GO_ARCH="armv6l" ;;
-        *)       die "Unsupported arch: $ARCH" ;;
-    esac
-    curl -fsSL "https://go.dev/dl/${GO_LATEST}.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tar.gz
-    rm -rf /usr/local/go
-    tar -C /usr/local -xzf /tmp/go.tar.gz
-    rm /tmp/go.tar.gz
+    if $need_go; then
+        GO_LATEST=$(curl -fsSL "https://go.dev/VERSION?m=text" | head -1)
+        ARCH=$(uname -m)
+        case "$ARCH" in
+            x86_64)  GO_ARCH="amd64"  ;;
+            aarch64) GO_ARCH="arm64"  ;;
+            armv*)   GO_ARCH="armv6l" ;;
+            *)       die "Unsupported arch: $ARCH" ;;
+        esac
+        curl -fsSL "https://go.dev/dl/${GO_LATEST}.linux-${GO_ARCH}.tar.gz" -o /tmp/go.tar.gz
+        rm -rf /usr/local/go
+        tar -C /usr/local -xzf /tmp/go.tar.gz
+        rm /tmp/go.tar.gz
+        export PATH="/usr/local/go/bin:$PATH"
+        echo 'export PATH="/usr/local/go/bin:$PATH"' > /etc/profile.d/golang.sh
+        ok "Go $(go version | awk '{print $3}') installed"
+    fi
     export PATH="/usr/local/go/bin:$PATH"
-    echo 'export PATH="/usr/local/go/bin:$PATH"' > /etc/profile.d/golang.sh
-    ok "Go $(go version | awk '{print $3}') installed"
-fi
-export PATH="/usr/local/go/bin:$PATH"
 
-banner "Building VayDNS"
-mkdir -p "$INSTALL_DIR"
-REPO_DIR="$INSTALL_DIR/src"
-if [[ -d "$REPO_DIR/.git" ]]; then
-    git -C "$REPO_DIR" pull --ff-only
-else
-    git clone --depth=1 https://github.com/net2share/vaydns.git "$REPO_DIR"
+    banner "Building VayDNS"
+    mkdir -p "$INSTALL_DIR"
+    REPO_DIR="$INSTALL_DIR/src"
+    if [[ -d "$REPO_DIR/.git" ]]; then
+        git -C "$REPO_DIR" pull --ff-only
+    else
+        git clone --depth=1 https://github.com/net2share/vaydns.git "$REPO_DIR"
+    fi
+    cd "$REPO_DIR"
+    go build -o "$INSTALL_DIR/vaydns-server" ./vaydns-server
+    ok "Built → ${INSTALL_DIR}/vaydns-server"
 fi
-cd "$REPO_DIR"
-go build -o "$INSTALL_DIR/vaydns-server" ./vaydns-server
-ok "Built → ${INSTALL_DIR}/vaydns-server"
 
 banner "Generating keypair"
 mkdir -p "$KEY_DIR"
@@ -481,6 +550,7 @@ LISTEN_PORT="${LISTEN_PORT}"
 NET_IFACE="${NET_IFACE}"
 SERVER_MTU="${SERVER_MTU}"
 TUNNEL_MODE="${TUNNEL_MODE}"
+INSTALL_METHOD="${INSTALL_METHOD}"
 EOF
 chmod 640 "$CONFIG_FILE"
 
