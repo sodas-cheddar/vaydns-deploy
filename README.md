@@ -24,7 +24,7 @@ Instead of manually installing Go, building binaries, configuring iptables, and 
 | 🔑 | Generates a Noise protocol keypair |
 | 🔀 | Configures `iptables` to redirect UDP port `53 → 5300` (no root daemon needed) |
 | 💾 | Persists iptables rules across reboots via `netfilter-persistent` |
-| ⚙️ | Creates and enables a `systemd` service that starts on boot |
+| ⚙️ | Creates and enables `systemd` services that start on boot |
 | 🚀 | Starts everything immediately and confirms it's running |
 
 ---
@@ -33,18 +33,19 @@ Instead of manually installing Go, building binaries, configuring iptables, and 
 
 During setup you choose how the SOCKS5 proxy is served:
 
-### Mode 1 — Server-side SOCKS *(easiest for browser proxying)*
+---
+
+### Mode 1 — Server-side SOCKS *(SSH-based)*
 
 The server runs `ssh -N -D` as its own systemd service. The VayDNS tunnel points directly at that SOCKS5 listener. The client only needs a single command — no SSH step required.
 
 ```bash
-# Client — one command, proxy ready on :7000
-vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:7000
+vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:7000 -max-qname-len 253
 ```
 
-Point your browser at `SOCKS5  127.0.0.1:7000` and you're done.
+Point your browser at `SOCKS5  127.0.0.1:7000`.
 
-> ⚠️ **Anyone who has your public key can use the proxy in this mode.** Keep the key private and only share it with trusted clients.
+> ⚠️ **Anyone who has your public key can use the proxy in this mode.** Keep the key private.
 
 ---
 
@@ -54,13 +55,30 @@ The tunnel forwards directly to SSH on port 22. Each client establishes their ow
 
 ```bash
 # Step 1 — start the tunnel
-vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:8000
+vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:8000 -max-qname-len 253
 
 # Step 2 — open a private SOCKS5 proxy through the tunnel
 ssh -N -D 127.0.0.1:7000 -p 8000 root@127.0.0.1
 ```
 
 Point your browser at `SOCKS5  127.0.0.1:7000`.
+
+---
+
+### Mode 3 — microsocks *(recommended, especially for Iran and restricted networks)*
+
+A minimal, lightweight SOCKS5 proxy ([microsocks](https://github.com/rofl0r/microsocks)) runs on the server as its own systemd service. The VayDNS tunnel points directly at it. The client only needs a single command.
+
+```bash
+# Client — one command, proxy ready on :7000
+vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:7000 -max-qname-len 253
+```
+
+Point your browser at `SOCKS5  127.0.0.1:7000` and you're done.
+
+> `-max-qname-len 253` is critical on public DNS resolvers — without it you will get MTU errors.
+
+> ⚠️ **Anyone who has your public key can use the proxy.** Keep the key private and only share it with trusted clients.
 
 ---
 
@@ -93,10 +111,10 @@ bash <(curl -Ls https://raw.githubusercontent.com/sodas-cheddar/vaydns-deploy/ma
 The script will prompt you for:
 
 - Tunnel subdomain (e.g. `t.example.com`)
-- Tunnel mode (`1` = server-side SOCKS, `2` = client-side SOCKS)
-- Installation method (`1` = prebuilt binary, `2` = build from source)
+- Tunnel mode (`3` = microsocks (default), `1` = server-side SOCKS, `2` = client-side SOCKS)
+- Installation method (`1` = prebuilt binary (default), `2` = build from source)
 - Network interface (auto-detected from default route)
-- Response MTU (default `1232`, safe max `1452`)
+- Response MTU (default `500` — conservative for ISP compatibility; raise to `1232` on unrestricted networks)
 
 At the end it prints your **public key**, the exact **DNS records** to add, and ready-to-paste **client commands**.
 
@@ -104,7 +122,35 @@ At the end it prints your **public key**, the exact **DNS records** to add, and 
 
 ## 🖥️ Client Setup
 
-Download a pre-built client binary from the [VayDNS releases page](https://github.com/net2share/vaydns/releases), or build it from source:
+Download the prebuilt client binary for your platform below. All links point to the **latest release** automatically.
+
+#### 🐧 Linux
+
+| Architecture | Download |
+|---|---|
+| x86_64 (64-bit PC) | [vaydns-client-linux-amd64](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-linux-amd64) |
+| ARM 64-bit (e.g. Raspberry Pi 4, Apple Silicon VM) | [vaydns-client-linux-arm64](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-linux-arm64) |
+| ARM 32-bit (e.g. Raspberry Pi 2/3) | [vaydns-client-linux-armv6](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-linux-armv6) |
+| x86 32-bit | [vaydns-client-linux-386](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-linux-386) |
+
+#### 🪟 Windows
+
+| Architecture | Download |
+|---|---|
+| x86_64 (64-bit, most PCs) | [vaydns-client-windows-amd64.exe](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-windows-amd64.exe) |
+| ARM 64-bit | [vaydns-client-windows-arm64.exe](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-windows-arm64.exe) |
+| x86 32-bit | [vaydns-client-windows-386.exe](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-windows-386.exe) |
+
+#### 🍎 macOS
+
+| Architecture | Download |
+|---|---|
+| Apple Silicon (M1/M2/M3) | [vaydns-client-darwin-arm64](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-darwin-arm64) |
+| Intel Mac | [vaydns-client-darwin-amd64](https://github.com/net2share/vaydns/releases/latest/download/vaydns-client-darwin-amd64) |
+
+> Not sure which to pick? On Windows open **Settings → System → About** and check "System type". On Linux run `uname -m` in a terminal. On Mac: Apple Silicon = ARM64, Intel = AMD64.
+
+Alternatively, build from source:
 
 ```bash
 git clone https://github.com/net2share/vaydns.git
@@ -116,11 +162,11 @@ go build -o vaydns-client ./vaydns-client
 
 | Flag | Transport | Covertness |
 |------|-----------|------------|
+| `-udp 8.8.8.8:53` | Plaintext UDP DNS | ✅ Works even when DoH/DoT are blocked |
 | `-doh https://cloudflare-dns.com/dns-query` | DNS over HTTPS | ✅ Looks like normal HTTPS |
 | `-dot 1.1.1.1:853` | DNS over TLS | ✅ Looks like normal TLS |
-| `-udp 8.8.8.8:53` | Plaintext UDP DNS | ❌ Visible on network |
 
-> ⚡ **DoH gives better throughput than UDP** — prefer it when available. UDP DNS can be rate-limited by public resolvers under sustained load.
+> 🇮🇷 **If you are in Iran or a similarly restricted network:** use `-udp` — DoH and DoT ports are commonly blocked. Always include `-max-qname-len 253` to avoid MTU errors on public resolvers.
 
 ### Browser Proxy Configuration
 
@@ -154,7 +200,7 @@ Re-running the script on an already-installed server opens an interactive manage
 ══════════════════════════════════════════
 
   Domain  : t.example.com
-  Mode    : Mode 1 — Server-side SOCKS
+  Mode    : Mode 3 — microsocks (lightweight, recommended for Iran)
   Binary  : Prebuilt release
   Service : active
 
@@ -170,20 +216,21 @@ Re-running the script on an already-installed server opens an interactive manage
 | Option | Description |
 |--------|-------------|
 | **Show client commands** | Reprints public key, DNS records, and all client commands |
-| **Switch tunnel mode** | Toggles between Mode 1 and Mode 2 — restarts everything cleanly |
+| **Switch tunnel mode** | Switch between Mode 1, 2, and 3 — restarts everything cleanly |
 | **Change domain** | Updates the tunnel domain and restarts the service |
-| **Show service status** | Runs `systemctl status` for vaydns (and vaydns-socks in Mode 1) |
+| **Show service status** | Runs `systemctl status` for vaydns and any mode-specific service |
 | **Update VayDNS** | Re-downloads the latest prebuilt binary, or pulls and rebuilds from source — whichever method was used at install time |
-| **Uninstall** | Stops services, removes iptables rules, deletes all files |
+| **Uninstall** | Stops all services, removes iptables rules, deletes all files |
 
 ### Manual commands
 
 ```bash
-systemctl status vaydns          # tunnel status
-systemctl status vaydns-socks    # SSH SOCKS5 status (mode 1 only)
-systemctl restart vaydns         # restart tunnel
-journalctl -u vaydns -f          # live logs
-cat /opt/vaydns/keys/server.pub  # show public key
+systemctl status vaydns               # tunnel status
+systemctl status vaydns-microsocks    # microsocks status (mode 3)
+systemctl status vaydns-socks         # SSH SOCKS5 status (mode 1)
+systemctl restart vaydns              # restart tunnel
+journalctl -u vaydns -f               # live logs
+cat /opt/vaydns/keys/server.pub       # show public key
 ```
 
 Configuration is stored at `/opt/vaydns/vaydns.conf`.
@@ -198,20 +245,27 @@ Client                    DNS Resolver              VPS
 Browser
   │ SOCKS5 :7000
   ▼
-vaydns-client ─── DoH / DoT / UDP ──────── UDP ──► vaydns-server :5300
-                                                          │
+vaydns-client ──── UDP / DoH / DoT ─────── UDP ──► vaydns-server :5300
+  -max-qname-len 253                                      │
                                                    iptables (53 → 5300)
                                                           │
                                             ┌─────────────▼────────────┐
+                                            │  Mode 3: microsocks      │
+                                            │  (lightweight, :1080)    │
+                                            ├──────────────────────────┤
                                             │  Mode 1: SSH -D :8000    │
-                                            │  (SOCKS5, open access)   │
+                                            │  (SOCKS5 via SSH)        │
                                             ├──────────────────────────┤
                                             │  Mode 2: sshd :22        │
                                             │  (SSH login required)    │
                                             └──────────────────────────┘
 ```
 
-The tunnel uses the [Noise protocol](https://noiseprotocol.org/noise.html) (`Noise_NK_25519_ChaChaPoly_BLAKE2s`) for end-to-end encryption between client and server, independent of whatever DNS transport is used. DoH/DoT additionally hides the tunnel traffic from local network observers.
+The tunnel uses the [Noise protocol](https://noiseprotocol.org/noise.html) (`Noise_NK_25519_ChaChaPoly_BLAKE2s`) for end-to-end encryption between client and server, independent of whatever DNS transport is used.
+
+### MTU Notes
+
+The server default MTU is **500**, which is conservative and compatible with most ISPs and public resolvers. If you are on an unrestricted network you can raise it to `1232` (safe for most EDNS(0) resolvers) or up to `1452`. The client flag `-max-qname-len 253` must always be used alongside UDP on public resolvers to avoid MTU-related errors.
 
 ---
 
@@ -219,7 +273,7 @@ The tunnel uses the [Noise protocol](https://noiseprotocol.org/noise.html) (`Noi
 
 - **Private key** lives at `/opt/vaydns/keys/server.key` — back it up and never share it
 - **Public key** is safe to share with clients — it authenticates the server, not the client
-- **Mode 1** is convenient but open: any client with the pubkey can proxy through your server
+- **Mode 3 and Mode 1** are open: any client with the pubkey can proxy through your server
 - **Mode 2** requires SSH credentials, giving you full access control and auth logging via `sshd`
 - The tunnel encrypts content end-to-end — the DNS resolver can see query destinations but not the data
 
@@ -244,5 +298,6 @@ This project would not exist without:
 
 - **[VayDNS](https://github.com/net2share/vaydns)** by [net2share](https://github.com/net2share) and contributors — the DNS tunnel server this script deploys. Released under CC0 (public domain).
 - **[dnstt](https://www.bamsoftware.com/software/dnstt/)** by [David Fifield](https://www.bamsoftware.com/) — the upstream project VayDNS is based on. Also public domain.
+- **[microsocks](https://github.com/rofl0r/microsocks)** by [rofl0r](https://github.com/rofl0r) — the lightweight SOCKS5 proxy used in Mode 3.
 
 The `deploy-vaydns.sh` script in this repository is original work released under the [MIT License](LICENSE).
