@@ -37,6 +37,15 @@ load_config() {
     [[ -f "$CONFIG_FILE" ]] && source "$CONFIG_FILE"
 }
 
+mode_label() {
+    case "${1:-1}" in
+        1) echo "Mode 1 — Server-side SOCKS (SSH)" ;;
+        2) echo "Mode 2 — Client-side SOCKS (SSH login)" ;;
+        3) echo "Mode 3 — microsocks (lightweight, recommended for Iran)" ;;
+        *) echo "Unknown" ;;
+    esac
+}
+
 show_client_commands() {
     load_config
     local server_ip pubkey tns_name
@@ -53,38 +62,52 @@ show_client_commands() {
     echo -e "${BOLD}DNS Records to add at your registrar:${RESET}"
     echo ""
     printf "  ${YELLOW}%-8s %-35s %s${RESET}\n" "Type" "Name" "Value"
-    printf "  %-8s %-35s %s\n" "A"  "$tns_name"       "$server_ip"
-    printf "  %-8s %-35s %s\n" "NS" "$TUNNEL_DOMAIN"  "$tns_name"
+    printf "  %-8s %-35s %s\n" "A"  "$tns_name"      "$server_ip"
+    printf "  %-8s %-35s %s\n" "NS" "$TUNNEL_DOMAIN" "$tns_name"
     echo ""
 
-    if [[ "${TUNNEL_MODE:-1}" -eq 1 ]]; then
+    local mode="${TUNNEL_MODE:-1}"
+
+    if [[ "$mode" -eq 1 ]]; then
         echo -e "${BOLD}Mode 1 — Server-side SOCKS (single command on client):${RESET}"
         echo ""
-        echo -e "  ${YELLOW}⚡ Tip: DoH gives better throughput than UDP — prefer it when available.${RESET}"
+        echo -e "  ${CYAN}# UDP (recommended — DoH/DoT may be blocked in some regions):${RESET}"
+        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
         echo ""
-        echo -e "  ${CYAN}# DNS over HTTPS (recommended):${RESET}"
-        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
+        echo -e "  ${CYAN}# DNS over HTTPS:${RESET}"
+        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
         echo ""
         echo -e "  ${CYAN}# DNS over TLS:${RESET}"
-        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
-        echo ""
-        echo -e "  ${CYAN}# UDP (may be rate-limited by public resolvers):${RESET}"
-        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000"
+        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
         echo ""
         echo -e "  ${CYAN}# Browser proxy:${RESET}  SOCKS5  127.0.0.1:7000"
         echo -e "  ${CYAN}# Test:${RESET}  curl --proxy socks5h://127.0.0.1:7000/ https://wtfismyip.com/text"
-    else
+
+    elif [[ "$mode" -eq 2 ]]; then
         echo -e "${BOLD}Mode 2 — Client-side SOCKS (two steps on client):${RESET}"
         echo ""
-        echo -e "  ${YELLOW}⚡ Tip: DoH gives better throughput than UDP — prefer it when available.${RESET}"
-        echo ""
         echo -e "  ${CYAN}# Step 1 — run vaydns-client (pick one transport):${RESET}"
-        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
-        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
-        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000"
+        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253"
+        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253"
+        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253"
         echo ""
         echo -e "  ${CYAN}# Step 2 — SSH SOCKS5 through the tunnel (enter your VPS password when prompted):${RESET}"
         echo -e "  ssh -N -D 127.0.0.1:7000 -p 8000 root@127.0.0.1"
+        echo ""
+        echo -e "  ${CYAN}# Browser proxy:${RESET}  SOCKS5  127.0.0.1:7000"
+        echo -e "  ${CYAN}# Test:${RESET}  curl --proxy socks5h://127.0.0.1:7000/ https://wtfismyip.com/text"
+
+    else
+        echo -e "${BOLD}Mode 3 — microsocks (single command on client):${RESET}"
+        echo ""
+        echo -e "  ${CYAN}# UDP (recommended — DoH/DoT may be blocked in some regions):${RESET}"
+        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
+        echo ""
+        echo -e "  ${CYAN}# DNS over HTTPS:${RESET}"
+        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
+        echo ""
+        echo -e "  ${CYAN}# DNS over TLS:${RESET}"
+        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
         echo ""
         echo -e "  ${CYAN}# Browser proxy:${RESET}  SOCKS5  127.0.0.1:7000"
         echo -e "  ${CYAN}# Test:${RESET}  curl --proxy socks5h://127.0.0.1:7000/ https://wtfismyip.com/text"
@@ -93,7 +116,8 @@ show_client_commands() {
     echo ""
     echo -e "${BOLD}Useful server commands:${RESET}"
     echo -e "  systemctl status vaydns"
-    [[ "${TUNNEL_MODE:-1}" -eq 1 ]] && echo -e "  systemctl status vaydns-socks"
+    [[ "$mode" -eq 1 ]] && echo -e "  systemctl status vaydns-socks"
+    [[ "$mode" -eq 3 ]] && echo -e "  systemctl status vaydns-microsocks"
     echo -e "  journalctl -u vaydns -f"
     echo -e "  cat ${KEY_DIR}/server.pub"
     echo ""
@@ -106,7 +130,7 @@ management_menu() {
     while true; do
         banner "VayDNS Management"
         echo -e "  ${BOLD}Domain  :${RESET} ${TUNNEL_DOMAIN:-unknown}"
-        echo -e "  ${BOLD}Mode    :${RESET} $([ "${TUNNEL_MODE:-1}" -eq 1 ] && echo 'Mode 1 — Server-side SOCKS' || echo 'Mode 2 — Client-side SOCKS (SSH)')"
+        echo -e "  ${BOLD}Mode    :${RESET} $(mode_label "${TUNNEL_MODE:-1}")"
         echo -e "  ${BOLD}Binary  :${RESET} $([ "${INSTALL_METHOD:-prebuilt}" = "prebuilt" ] && echo 'Prebuilt release' || echo 'Built from source')"
         echo -e "  ${BOLD}Service :${RESET} $(systemctl is-active vaydns 2>/dev/null || echo 'unknown')"
         echo ""
@@ -136,7 +160,9 @@ management_menu() {
             4)
                 echo ""
                 systemctl status vaydns --no-pager || true
-                [[ "${TUNNEL_MODE:-1}" -eq 1 ]] && { echo ""; systemctl status vaydns-socks --no-pager || true; }
+                local m="${TUNNEL_MODE:-1}"
+                [[ "$m" -eq 1 ]] && { echo ""; systemctl status vaydns-socks --no-pager || true; }
+                [[ "$m" -eq 3 ]] && { echo ""; systemctl status vaydns-microsocks --no-pager || true; }
                 echo ""
                 read -rp "Press Enter to return to menu..." _
                 ;;
@@ -161,25 +187,60 @@ management_menu() {
 switch_mode() {
     load_config
     local current="${TUNNEL_MODE:-1}"
-    if [[ "$current" -eq 1 ]]; then
-        info "Switching Mode 1 → Mode 2 (client-side SSH)"
-        TUNNEL_MODE=2
-        UPSTREAM="127.0.0.1:22"
-        systemctl stop vaydns-socks 2>/dev/null || true
-        systemctl disable vaydns-socks 2>/dev/null || true
-        rm -f /etc/systemd/system/vaydns-socks.service
-    else
-        info "Switching Mode 2 → Mode 1 (server-side SOCKS)"
-        TUNNEL_MODE=1
-        UPSTREAM="127.0.0.1:8000"
-        setup_ssh_socks
-    fi
+    echo ""
+    echo -e "${BOLD}Select new tunnel mode:${RESET}"
+    echo ""
+    echo -e "  ${CYAN}1) Server-side SOCKS${RESET}  — SSH -D proxy on server, one client command"
+    echo -e "  ${CYAN}2) Client-side SOCKS${RESET}  — tunnel to SSH port 22, client runs ssh -N -D"
+    echo -e "  ${CYAN}3) microsocks${RESET}          — lightweight SOCKS5 proxy, recommended for Iran"
+    echo ""
+    read -rp "$(echo -e "${BOLD}Mode [1/2/3]${RESET} (current: ${current}): ")" NEW_MODE
+    NEW_MODE="${NEW_MODE:-$current}"
+
+    [[ "$NEW_MODE" == "$current" ]] && { info "Already on mode ${current}. No change."; return; }
+
+    # Stop whatever the current mode runs
+    case "$current" in
+        1)
+            systemctl stop vaydns-socks 2>/dev/null || true
+            systemctl disable vaydns-socks 2>/dev/null || true
+            rm -f /etc/systemd/system/vaydns-socks.service
+            ;;
+        3)
+            systemctl stop vaydns-microsocks 2>/dev/null || true
+            systemctl disable vaydns-microsocks 2>/dev/null || true
+            rm -f /etc/systemd/system/vaydns-microsocks.service
+            ;;
+    esac
+
+    # Set up whatever the new mode needs
+    case "$NEW_MODE" in
+        1)
+            TUNNEL_MODE=1
+            UPSTREAM="127.0.0.1:8000"
+            setup_ssh_socks
+            ;;
+        2)
+            TUNNEL_MODE=2
+            UPSTREAM="127.0.0.1:22"
+            ;;
+        3)
+            TUNNEL_MODE=3
+            UPSTREAM="127.0.0.1:1080"
+            setup_microsocks
+            ;;
+        *)
+            warn "Invalid mode. No change."
+            return
+            ;;
+    esac
+
     sed -i "s/^TUNNEL_MODE=.*/TUNNEL_MODE=\"${TUNNEL_MODE}\"/" "$CONFIG_FILE"
     sed -i "s|^UPSTREAM=.*|UPSTREAM=\"${UPSTREAM}\"|" "$CONFIG_FILE"
     write_vaydns_service
     systemctl daemon-reload
     systemctl restart vaydns
-    ok "Switched to mode ${TUNNEL_MODE}."
+    ok "Switched to $(mode_label "$TUNNEL_MODE")."
 }
 
 change_domain() {
@@ -220,9 +281,11 @@ uninstall_vaydns() {
     read -rp "$(echo -e "${RED}${BOLD}Uninstall everything and remove all files? [y/N]:${RESET} ")" CONFIRM
     [[ "${CONFIRM,,}" == "y" ]] || { info "Aborted."; return; }
     load_config
-    systemctl stop vaydns vaydns-socks 2>/dev/null || true
-    systemctl disable vaydns vaydns-socks 2>/dev/null || true
-    rm -f /etc/systemd/system/vaydns.service /etc/systemd/system/vaydns-socks.service
+    systemctl stop vaydns vaydns-socks vaydns-microsocks 2>/dev/null || true
+    systemctl disable vaydns vaydns-socks vaydns-microsocks 2>/dev/null || true
+    rm -f /etc/systemd/system/vaydns.service \
+          /etc/systemd/system/vaydns-socks.service \
+          /etc/systemd/system/vaydns-microsocks.service
     systemctl daemon-reload
     iptables  -D INPUT -p udp --dport "${LISTEN_PORT}" -j ACCEPT 2>/dev/null || true
     iptables  -t nat -D PREROUTING -i "${NET_IFACE}" -p udp --dport 53 -j REDIRECT --to-ports "${LISTEN_PORT}" 2>/dev/null || true
@@ -241,10 +304,10 @@ install_prebuilt() {
 
     local arch
     case "$(uname -m)" in
-        x86_64)        arch="linux-amd64"  ;;
-        aarch64|arm64) arch="linux-arm64"  ;;
-        armv6l|armv7l) arch="linux-armv6"  ;;
-        i386|i686)     arch="linux-386"    ;;
+        x86_64)        arch="linux-amd64" ;;
+        aarch64|arm64) arch="linux-arm64" ;;
+        armv6l|armv7l) arch="linux-armv6" ;;
+        i386|i686)     arch="linux-386"   ;;
         *) die "No prebuilt binary for architecture: $(uname -m). Use build from source instead." ;;
     esac
 
@@ -263,7 +326,6 @@ install_prebuilt() {
     curl -fsSL "$url" -o "$INSTALL_DIR/vaydns-server"
     chmod +x "$INSTALL_DIR/vaydns-server"
 
-    # Verify checksum if available
     if curl -fsSL "${url}.sha256" -o /tmp/vaydns-server.sha256 2>/dev/null; then
         local expected actual
         expected=$(awk '{print $1}' /tmp/vaydns-server.sha256)
@@ -279,6 +341,48 @@ install_prebuilt() {
     fi
 
     ok "Downloaded vaydns-server ${latest_tag} → ${INSTALL_DIR}/vaydns-server"
+}
+
+# ── microsocks setup (mode 3) ─────────────────────────────────────────────────
+
+setup_microsocks() {
+    banner "Setting up microsocks"
+
+    if ! command -v microsocks &>/dev/null; then
+        info "Installing microsocks..."
+        apt-get update -qq
+        apt-get install -y -qq microsocks
+        ok "microsocks installed"
+    else
+        info "microsocks already installed"
+    fi
+
+    cat > /etc/systemd/system/vaydns-microsocks.service <<EOF
+[Unit]
+Description=VayDNS microsocks lightweight SOCKS5 proxy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/microsocks -i 127.0.0.1 -p 1080
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable vaydns-microsocks.service
+    systemctl restart vaydns-microsocks.service
+    sleep 2
+
+    if systemctl is-active --quiet vaydns-microsocks.service; then
+        ok "vaydns-microsocks running — SOCKS5 on 127.0.0.1:1080"
+    else
+        warn "vaydns-microsocks failed. Check: journalctl -u vaydns-microsocks -n 30"
+    fi
 }
 
 # ── SSH SOCKS5 setup (mode 1) ─────────────────────────────────────────────────
@@ -419,17 +523,21 @@ done
 echo ""
 echo -e "${BOLD}Select tunnel mode:${RESET}"
 echo ""
-echo -e "  ${CYAN}1) Server-side SOCKS${RESET} — client runs one command, proxy is ready."
-echo -e "     ${YELLOW}Warning: anyone with the pubkey can use the proxy.${RESET}"
+echo -e "  ${CYAN}1) Server-side SOCKS${RESET}  — SSH SOCKS5 proxy runs on the server."
+echo -e "     Client needs one command. ${YELLOW}Anyone with the pubkey can use the proxy.${RESET}"
 echo ""
-echo -e "  ${CYAN}2) Client-side SOCKS${RESET} — client runs vaydns-client then ssh -N -D."
-echo -e "     Requires SSH credentials. More private."
+echo -e "  ${CYAN}2) Client-side SOCKS${RESET}  — tunnel forwards to SSH (port 22)."
+echo -e "     Client runs vaydns-client then ssh -N -D. Requires SSH credentials."
 echo ""
-read -rp "$(echo -e "${BOLD}Mode [1/2]${RESET} (default: 1): ")" TUNNEL_MODE
-TUNNEL_MODE="${TUNNEL_MODE:-1}"
+echo -e "  ${CYAN}3) microsocks${RESET}  — lightweight SOCKS5 proxy, low resource usage."
+echo -e "     ${GREEN}Recommended for Iran and restricted networks.${RESET} Client needs one command."
+echo ""
+read -rp "$(echo -e "${BOLD}Mode [1/2/3]${RESET} (default: 3): ")" TUNNEL_MODE
+TUNNEL_MODE="${TUNNEL_MODE:-3}"
 case "$TUNNEL_MODE" in
+    1) UPSTREAM="127.0.0.1:8000" ;;
     2) UPSTREAM="127.0.0.1:22"   ;;
-    *) TUNNEL_MODE=1; UPSTREAM="127.0.0.1:8000" ;;
+    *) TUNNEL_MODE=3; UPSTREAM="127.0.0.1:1080" ;;
 esac
 
 echo ""
@@ -454,13 +562,13 @@ read -rp "$(echo -e "${BOLD}Network interface${RESET} [${DEFAULT_IFACE}]: ")" NE
 NET_IFACE="${NET_IFACE:-$DEFAULT_IFACE}"
 
 echo ""
-read -rp "$(echo -e "${BOLD}Response MTU${RESET} (default 1232, safe max 1452): ")" SERVER_MTU
-SERVER_MTU="${SERVER_MTU:-1232}"
+read -rp "$(echo -e "${BOLD}Response MTU${RESET} (default 500, increase to 1232 on unrestricted networks): ")" SERVER_MTU
+SERVER_MTU="${SERVER_MTU:-500}"
 
 echo ""
 echo -e "${BOLD}Summary${RESET}"
 echo -e "  Tunnel domain  : ${YELLOW}${TUNNEL_DOMAIN}${RESET}"
-echo -e "  Mode           : ${YELLOW}$([ "$TUNNEL_MODE" -eq 1 ] && echo 'Mode 1 — Server-side SOCKS' || echo 'Mode 2 — Client-side SOCKS')${RESET}"
+echo -e "  Mode           : ${YELLOW}$(mode_label "$TUNNEL_MODE")${RESET}"
 echo -e "  Install method : ${YELLOW}$([ "$INSTALL_METHOD" = "prebuilt" ] && echo 'Prebuilt binary (latest release)' || echo 'Build from source')${RESET}"
 echo -e "  Listen port    : ${YELLOW}${LISTEN_PORT} (iptables 53 → ${LISTEN_PORT})${RESET}"
 echo -e "  Interface      : ${YELLOW}${NET_IFACE}${RESET}"
@@ -568,7 +676,10 @@ elif command -v iptables-save &>/dev/null; then
 fi
 ok "iptables configured and persisted"
 
-[[ "$TUNNEL_MODE" -eq 1 ]] && setup_ssh_socks
+case "$TUNNEL_MODE" in
+    1) setup_ssh_socks ;;
+    3) setup_microsocks ;;
+esac
 
 banner "Creating systemd service"
 write_vaydns_service
