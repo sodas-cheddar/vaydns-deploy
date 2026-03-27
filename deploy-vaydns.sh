@@ -321,24 +321,33 @@ install_prebuilt() {
 
     local asset="vaydns-server-${arch}"
     local url="https://github.com/net2share/vaydns/releases/download/${latest_tag}/${asset}"
+    local tmp_bin="/tmp/vaydns-server-new"
 
     info "Downloading ${asset} (${latest_tag})..."
-    curl -fsSL "$url" -o "$INSTALL_DIR/vaydns-server"
-    chmod +x "$INSTALL_DIR/vaydns-server"
+    # Download to a temp file first — avoids overwriting a running binary
+    curl -fsSL "$url" -o "$tmp_bin" || die "Download failed. Check your internet connection."
 
     if curl -fsSL "${url}.sha256" -o /tmp/vaydns-server.sha256 2>/dev/null; then
         local expected actual
         expected=$(awk '{print $1}' /tmp/vaydns-server.sha256)
-        actual=$(sha256sum "$INSTALL_DIR/vaydns-server" | awk '{print $1}')
+        actual=$(sha256sum "$tmp_bin" | awk '{print $1}')
         rm -f /tmp/vaydns-server.sha256
         if [[ "$expected" == "$actual" ]]; then
             ok "Checksum verified ✓"
         else
+            rm -f "$tmp_bin"
             die "Checksum mismatch! Expected ${expected}, got ${actual}. Aborting."
         fi
     else
         warn "Could not fetch checksum file — skipping verification."
     fi
+
+    # Stop the service so the binary is no longer in use, then replace it
+    info "Stopping vaydns service to replace binary..."
+    systemctl stop vaydns 2>/dev/null || true
+
+    chmod +x "$tmp_bin"
+    mv "$tmp_bin" "$INSTALL_DIR/vaydns-server"
 
     ok "Downloaded vaydns-server ${latest_tag} → ${INSTALL_DIR}/vaydns-server"
 }
@@ -529,7 +538,7 @@ echo ""
 echo -e "  ${CYAN}2) Client-side SOCKS${RESET}  — tunnel forwards to SSH (port 22)."
 echo -e "     Client runs vaydns-client then ssh -N -D. Requires SSH credentials."
 echo ""
-echo -e "  ${CYAN}3) microsocks${RESET}  — lightweight SOCKS5 proxy, low resource usage."
+echo -e "  ${CYAN}3) microsocks${RESET}          — lightweight SOCKS5 proxy, low resource usage."
 echo -e "     ${GREEN}Recommended for Iran and restricted networks.${RESET} Client needs one command."
 echo ""
 read -rp "$(echo -e "${BOLD}Mode [1/2/3]${RESET} (default: 3): ")" TUNNEL_MODE
