@@ -35,6 +35,23 @@ During setup you choose how the SOCKS5 proxy is served:
 
 ---
 
+### Mode 3 — microsocks *(recommended, especially for Iran and restricted networks)*
+
+A minimal, lightweight SOCKS5 proxy ([microsocks](https://github.com/rofl0r/microsocks)) runs on the server as its own systemd service. The VayDNS tunnel points directly at it. The client only needs a single command.
+
+```bash
+# Client — one command, proxy ready on :7000
+vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:7000 -max-qname-len 253
+```
+
+Point your browser at `SOCKS5  127.0.0.1:7000` and you're done.
+
+> `-max-qname-len 253` is critical on public DNS resolvers — without it you will get MTU errors.
+
+> ⚠️ **Anyone who has your public key can use the proxy.** Keep the key private and only share it with trusted clients.
+
+---
+
 ### Mode 1 — Server-side SOCKS *(SSH-based)*
 
 The server runs `ssh -N -D` as its own systemd service. The VayDNS tunnel points directly at that SOCKS5 listener. The client only needs a single command — no SSH step required.
@@ -62,23 +79,6 @@ ssh -N -D 127.0.0.1:7000 -p 8000 root@127.0.0.1
 ```
 
 Point your browser at `SOCKS5  127.0.0.1:7000`.
-
----
-
-### Mode 3 — microsocks *(recommended, especially for Iran and restricted networks)*
-
-A minimal, lightweight SOCKS5 proxy ([microsocks](https://github.com/rofl0r/microsocks)) runs on the server as its own systemd service. The VayDNS tunnel points directly at it. The client only needs a single command.
-
-```bash
-# Client — one command, proxy ready on :7000
-vaydns-client -udp 8.8.8.8:53 -pubkey <server-pubkey> -domain t.example.com -listen 127.0.0.1:7000 -max-qname-len 253
-```
-
-Point your browser at `SOCKS5  127.0.0.1:7000` and you're done.
-
-> `-max-qname-len 253` is critical on public DNS resolvers — without it you will get MTU errors.
-
-> ⚠️ **Anyone who has your public key can use the proxy.** Keep the key private and only share it with trusted clients.
 
 ---
 
@@ -113,6 +113,7 @@ The script will prompt you for:
 - Tunnel subdomain (e.g. `t.example.com`)
 - Tunnel mode (`3` = microsocks (default), `1` = server-side SOCKS, `2` = client-side SOCKS)
 - Installation method (`1` = prebuilt binary (default), `2` = build from source)
+- DNS record type (`txt` default — see [Record Types](#-record-types) below)
 - Network interface (auto-detected from default route)
 - Response MTU (default `500` — conservative for ISP compatibility; raise to `1232` on unrestricted networks)
 
@@ -199,25 +200,31 @@ Re-running the script on an already-installed server opens an interactive manage
   VayDNS Management
 ══════════════════════════════════════════
 
-  Domain  : t.example.com
-  Mode    : Mode 3 — microsocks (lightweight, recommended for Iran)
-  Binary  : Prebuilt release
-  Service : active
+  Domain      : t.example.com
+  Mode        : Mode 3 — microsocks (lightweight, recommended for Iran)
+  Record type : txt
+  MTU         : 500
+  Binary      : Prebuilt release
+  Service     : active
 
   1) Show client connection commands
   2) Switch tunnel mode
   3) Change domain
-  4) Show service status
-  5) Update VayDNS
-  6) Uninstall
-  7) Exit
+  4) Change DNS record type
+  5) Change MTU
+  6) Show service status
+  7) Update VayDNS
+  8) Uninstall
+  9) Exit
 ```
 
 | Option | Description |
 |--------|-------------|
-| **Show client commands** | Reprints public key, DNS records, and all client commands |
+| **Show client commands** | Reprints public key, DNS records, and client commands — automatically includes `-record-type` flag when non-default |
 | **Switch tunnel mode** | Switch between Mode 1, 2, and 3 — restarts everything cleanly |
 | **Change domain** | Updates the tunnel domain and restarts the service |
+| **Change DNS record type** | Switch between `txt`, `cname`, `ns`, `mx`, `srv`, `a`, `aaaa` — updates server and shows correct client flag |
+| **Change MTU** | Adjust response MTU between 50–1452 bytes and restart |
 | **Show service status** | Runs `systemctl status` for vaydns and any mode-specific service |
 | **Update VayDNS** | Re-downloads the latest prebuilt binary, or pulls and rebuilds from source — whichever method was used at install time |
 | **Uninstall** | Stops all services, removes iptables rules, deletes all files |
@@ -266,6 +273,22 @@ The tunnel uses the [Noise protocol](https://noiseprotocol.org/noise.html) (`Noi
 ### MTU Notes
 
 The server default MTU is **500**, which is conservative and compatible with most ISPs and public resolvers. If you are on an unrestricted network you can raise it to `1232` (safe for most EDNS(0) resolvers) or up to `1452`. The client flag `-max-qname-len 253` must always be used alongside UDP on public resolvers to avoid MTU-related errors.
+
+### Record Types
+
+Added in v0.2.4, the `-record-type` flag lets both server and client encode tunnel data in different DNS record types. This can help bypass network filters that specifically block TXT queries. **Both server and client must use the same type.**
+
+| Type | Notes | Capacity |
+|------|-------|----------|
+| `txt` | Default. Highest capacity, compatible with all versions | Bounded by UDP payload |
+| `cname` | Encoded as a DNS name — may bypass TXT-blocking filters | Bounded by 255-byte name limit |
+| `ns` | Same encoding as CNAME | Same as CNAME |
+| `mx` | Same encoding as CNAME | Same as CNAME |
+| `srv` | Same encoding as CNAME | Same as CNAME |
+| `a` | Data split across multiple A records | Bounded by UDP payload |
+| `aaaa` | Data split across multiple AAAA records | Bounded by UDP payload |
+
+When a non-default record type is configured, the management menu's **Show client commands** option automatically appends `-record-type <type>` to every client command.
 
 ---
 
