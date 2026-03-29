@@ -48,10 +48,13 @@ mode_label() {
 
 show_client_commands() {
     load_config
-    local server_ip pubkey tns_name
+    local server_ip pubkey tns_name rt_flag
     server_ip=$(curl -fsSL https://api.ipify.org 2>/dev/null || hostname -I | awk '{print $1}')
     pubkey=$(cat "$KEY_DIR/server.pub" 2>/dev/null || echo "<pubkey-not-found>")
     tns_name="tns.${TUNNEL_DOMAIN#*.}"
+    # Only append -record-type if it's non-default (txt is the default)
+    rt_flag=""
+    [[ "${RECORD_TYPE:-txt}" != "txt" ]] && rt_flag=" -record-type ${RECORD_TYPE}"
 
     banner "Client Connection Info"
 
@@ -72,13 +75,13 @@ show_client_commands() {
         echo -e "${BOLD}Mode 1 — Server-side SOCKS (single command on client):${RESET}"
         echo ""
         echo -e "  ${CYAN}# UDP (recommended — DoH/DoT may be blocked in some regions):${RESET}"
-        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
+        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253${rt_flag}"
         echo ""
         echo -e "  ${CYAN}# DNS over HTTPS:${RESET}"
-        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
+        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253${rt_flag}"
         echo ""
         echo -e "  ${CYAN}# DNS over TLS:${RESET}"
-        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
+        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253${rt_flag}"
         echo ""
         echo -e "  ${CYAN}# Browser proxy:${RESET}  SOCKS5  127.0.0.1:7000"
         echo -e "  ${CYAN}# Test:${RESET}  curl --proxy socks5h://127.0.0.1:7000/ https://wtfismyip.com/text"
@@ -87,9 +90,9 @@ show_client_commands() {
         echo -e "${BOLD}Mode 2 — Client-side SOCKS (two steps on client):${RESET}"
         echo ""
         echo -e "  ${CYAN}# Step 1 — run vaydns-client (pick one transport):${RESET}"
-        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253"
-        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253"
-        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253"
+        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253${rt_flag}"
+        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253${rt_flag}"
+        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:8000 -max-qname-len 253${rt_flag}"
         echo ""
         echo -e "  ${CYAN}# Step 2 — SSH SOCKS5 through the tunnel (enter your VPS password when prompted):${RESET}"
         echo -e "  ssh -N -D 127.0.0.1:7000 -p 8000 root@127.0.0.1"
@@ -101,13 +104,13 @@ show_client_commands() {
         echo -e "${BOLD}Mode 3 — microsocks (single command on client):${RESET}"
         echo ""
         echo -e "  ${CYAN}# UDP (recommended — DoH/DoT may be blocked in some regions):${RESET}"
-        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
+        echo -e "  vaydns-client -udp 8.8.8.8:53 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253${rt_flag}"
         echo ""
         echo -e "  ${CYAN}# DNS over HTTPS:${RESET}"
-        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
+        echo -e "  vaydns-client -doh https://cloudflare-dns.com/dns-query -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253${rt_flag}"
         echo ""
         echo -e "  ${CYAN}# DNS over TLS:${RESET}"
-        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253"
+        echo -e "  vaydns-client -dot 1.1.1.1:853 -pubkey ${pubkey} -domain ${TUNNEL_DOMAIN} -listen 127.0.0.1:7000 -max-qname-len 253${rt_flag}"
         echo ""
         echo -e "  ${CYAN}# Browser proxy:${RESET}  SOCKS5  127.0.0.1:7000"
         echo -e "  ${CYAN}# Test:${RESET}  curl --proxy socks5h://127.0.0.1:7000/ https://wtfismyip.com/text"
@@ -129,20 +132,24 @@ management_menu() {
     load_config
     while true; do
         banner "VayDNS Management"
-        echo -e "  ${BOLD}Domain  :${RESET} ${TUNNEL_DOMAIN:-unknown}"
-        echo -e "  ${BOLD}Mode    :${RESET} $(mode_label "${TUNNEL_MODE:-1}")"
-        echo -e "  ${BOLD}Binary  :${RESET} $([ "${INSTALL_METHOD:-prebuilt}" = "prebuilt" ] && echo 'Prebuilt release' || echo 'Built from source')"
-        echo -e "  ${BOLD}Service :${RESET} $(systemctl is-active vaydns 2>/dev/null || echo 'unknown')"
+        echo -e "  ${BOLD}Domain      :${RESET} ${TUNNEL_DOMAIN:-unknown}"
+        echo -e "  ${BOLD}Mode        :${RESET} $(mode_label "${TUNNEL_MODE:-1}")"
+        echo -e "  ${BOLD}Record type :${RESET} ${RECORD_TYPE:-txt}"
+        echo -e "  ${BOLD}MTU         :${RESET} ${SERVER_MTU:-500}"
+        echo -e "  ${BOLD}Binary      :${RESET} $([ "${INSTALL_METHOD:-prebuilt}" = "prebuilt" ] && echo 'Prebuilt release' || echo 'Built from source')"
+        echo -e "  ${BOLD}Service     :${RESET} $(systemctl is-active vaydns 2>/dev/null || echo 'unknown')"
         echo ""
         echo -e "  1) Show client connection commands"
         echo -e "  2) Switch tunnel mode"
         echo -e "  3) Change domain"
-        echo -e "  4) Show service status"
-        echo -e "  5) Update VayDNS"
-        echo -e "  6) Uninstall"
-        echo -e "  7) Exit"
+        echo -e "  4) Change DNS record type"
+        echo -e "  5) Change MTU"
+        echo -e "  6) Show service status"
+        echo -e "  7) Update VayDNS"
+        echo -e "  8) Uninstall"
+        echo -e "  9) Exit"
         echo ""
-        read -rp "$(echo -e "${BOLD}Choice [1-7]:${RESET} ")" CHOICE
+        read -rp "$(echo -e "${BOLD}Choice [1-9]:${RESET} ")" CHOICE
 
         case "$CHOICE" in
             1)
@@ -158,6 +165,14 @@ management_menu() {
                 load_config
                 ;;
             4)
+                change_record_type
+                load_config
+                ;;
+            5)
+                change_mtu
+                load_config
+                ;;
+            6)
                 echo ""
                 systemctl status vaydns --no-pager || true
                 local m="${TUNNEL_MODE:-1}"
@@ -166,15 +181,15 @@ management_menu() {
                 echo ""
                 read -rp "Press Enter to return to menu..." _
                 ;;
-            5)
+            7)
                 update_vaydns
                 read -rp "Press Enter to return to menu..." _
                 ;;
-            6)
+            8)
                 uninstall_vaydns
                 exit 0
                 ;;
-            7)
+            9)
                 exit 0
                 ;;
             *)
@@ -257,6 +272,64 @@ change_domain() {
     systemctl daemon-reload
     systemctl restart vaydns
     ok "Domain updated to ${TUNNEL_DOMAIN}. Tunnel restarted."
+}
+
+change_record_type() {
+    load_config
+    echo ""
+    echo -e "${BOLD}Select DNS record type for downstream data:${RESET}"
+    echo ""
+    echo -e "  ${CYAN}1) txt${RESET}   — default, highest capacity, compatible with all versions"
+    echo -e "  ${CYAN}2) cname${RESET} — encoded as DNS name, may bypass some filters"
+    echo -e "  ${CYAN}3) ns${RESET}    — same encoding as CNAME"
+    echo -e "  ${CYAN}4) mx${RESET}    — same encoding as CNAME"
+    echo -e "  ${CYAN}5) srv${RESET}   — same encoding as CNAME"
+    echo -e "  ${CYAN}6) a${RESET}     — data split across multiple A records"
+    echo -e "  ${CYAN}7) aaaa${RESET}  — data split across multiple AAAA records"
+    echo ""
+    echo -e "  ${YELLOW}Note: client and server must use the same record type.${RESET}"
+    echo -e "  ${YELLOW}The client command shown in option 1 will update automatically.${RESET}"
+    echo ""
+    read -rp "$(echo -e "${BOLD}Type [1-7]${RESET} (current: ${RECORD_TYPE:-txt}): ")" RT_CHOICE
+    case "${RT_CHOICE:-1}" in
+        1) RECORD_TYPE="txt"   ;;
+        2) RECORD_TYPE="cname" ;;
+        3) RECORD_TYPE="ns"    ;;
+        4) RECORD_TYPE="mx"    ;;
+        5) RECORD_TYPE="srv"   ;;
+        6) RECORD_TYPE="a"     ;;
+        7) RECORD_TYPE="aaaa"  ;;
+        *) warn "Invalid choice. No change."; return ;;
+    esac
+    if grep -q "^RECORD_TYPE=" "$CONFIG_FILE"; then
+        sed -i "s/^RECORD_TYPE=.*/RECORD_TYPE=\"${RECORD_TYPE}\"/" "$CONFIG_FILE"
+    else
+        echo "RECORD_TYPE=\"${RECORD_TYPE}\"" >> "$CONFIG_FILE"
+    fi
+    write_vaydns_service
+    systemctl daemon-reload
+    systemctl restart vaydns
+    ok "Record type changed to '${RECORD_TYPE}'. Tunnel restarted."
+}
+
+change_mtu() {
+    load_config
+    echo ""
+    echo -e "  ${YELLOW}500${RESET}  — conservative, compatible with most ISPs (default)"
+    echo -e "  ${YELLOW}1232${RESET} — safe for most EDNS(0) resolvers on unrestricted networks"
+    echo -e "  ${YELLOW}1452${RESET} — max practical before IP fragmentation"
+    echo ""
+    read -rp "$(echo -e "${BOLD}New MTU${RESET} (current: ${SERVER_MTU:-500}): ")" NEW_MTU
+    [[ -z "$NEW_MTU" ]] && { info "No change."; return; }
+    if ! [[ "$NEW_MTU" =~ ^[0-9]+$ ]] || (( NEW_MTU < 50 || NEW_MTU > 1452 )); then
+        warn "Invalid MTU. Must be a number between 50 and 1452."; return
+    fi
+    SERVER_MTU="$NEW_MTU"
+    sed -i "s/^SERVER_MTU=.*/SERVER_MTU=\"${SERVER_MTU}\"/" "$CONFIG_FILE"
+    write_vaydns_service
+    systemctl daemon-reload
+    systemctl restart vaydns
+    ok "MTU changed to ${SERVER_MTU}. Tunnel restarted."
 }
 
 update_vaydns() {
@@ -484,6 +557,8 @@ EOF
 
 write_vaydns_service() {
     load_config
+    local rt_flag=""
+    [[ "${RECORD_TYPE:-txt}" != "txt" ]] && rt_flag=" -record-type ${RECORD_TYPE}"
     cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF
 [Unit]
 Description=VayDNS DNS tunnel server
@@ -493,7 +568,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=${INSTALL_DIR}/vaydns-server -udp :${LISTEN_PORT} -domain ${TUNNEL_DOMAIN} -upstream ${UPSTREAM} -privkey-file ${KEY_DIR}/server.key -mtu ${SERVER_MTU}
+ExecStart=${INSTALL_DIR}/vaydns-server -udp :${LISTEN_PORT} -domain ${TUNNEL_DOMAIN} -upstream ${UPSTREAM} -privkey-file ${KEY_DIR}/server.key -mtu ${SERVER_MTU}${rt_flag}
 Restart=on-failure
 RestartSec=5s
 
@@ -538,7 +613,7 @@ echo ""
 echo -e "  ${CYAN}2) Client-side SOCKS${RESET}  — tunnel forwards to SSH (port 22)."
 echo -e "     Client runs vaydns-client then ssh -N -D. Requires SSH credentials."
 echo ""
-echo -e "  ${CYAN}3) microsocks${RESET}          — lightweight SOCKS5 proxy, low resource usage."
+echo -e "  ${CYAN}3) microsocks${RESET} — lightweight SOCKS5 proxy, low resource usage."
 echo -e "     ${GREEN}Recommended for Iran and restricted networks.${RESET} Client needs one command."
 echo ""
 read -rp "$(echo -e "${BOLD}Mode [1/2/3]${RESET} (default: 3): ")" TUNNEL_MODE
@@ -575,10 +650,33 @@ read -rp "$(echo -e "${BOLD}Response MTU${RESET} (default 500, increase to 1232 
 SERVER_MTU="${SERVER_MTU:-500}"
 
 echo ""
+echo -e "${BOLD}DNS record type${RESET} for downstream data (server and client must match):"
+echo ""
+echo -e "  ${CYAN}1) txt${RESET}   — default, highest capacity, works everywhere"
+echo -e "  ${CYAN}2) cname${RESET} — may bypass filters that block TXT queries"
+echo -e "  ${CYAN}3) ns${RESET}    — alternative to CNAME"
+echo -e "  ${CYAN}4) mx${RESET}    — alternative to CNAME"
+echo -e "  ${CYAN}5) srv${RESET}   — alternative to CNAME"
+echo -e "  ${CYAN}6) a${RESET}     — data split across multiple A records"
+echo -e "  ${CYAN}7) aaaa${RESET}  — data split across multiple AAAA records"
+echo ""
+read -rp "$(echo -e "${BOLD}Record type [1-7]${RESET} (default: 1): ")" RT_CHOICE
+case "${RT_CHOICE:-1}" in
+    2) RECORD_TYPE="cname" ;;
+    3) RECORD_TYPE="ns"    ;;
+    4) RECORD_TYPE="mx"    ;;
+    5) RECORD_TYPE="srv"   ;;
+    6) RECORD_TYPE="a"     ;;
+    7) RECORD_TYPE="aaaa"  ;;
+    *) RECORD_TYPE="txt"   ;;
+esac
+
+echo ""
 echo -e "${BOLD}Summary${RESET}"
 echo -e "  Tunnel domain  : ${YELLOW}${TUNNEL_DOMAIN}${RESET}"
 echo -e "  Mode           : ${YELLOW}$(mode_label "$TUNNEL_MODE")${RESET}"
 echo -e "  Install method : ${YELLOW}$([ "$INSTALL_METHOD" = "prebuilt" ] && echo 'Prebuilt binary (latest release)' || echo 'Build from source')${RESET}"
+echo -e "  Record type    : ${YELLOW}${RECORD_TYPE}${RESET}"
 echo -e "  Listen port    : ${YELLOW}${LISTEN_PORT} (iptables 53 → ${LISTEN_PORT})${RESET}"
 echo -e "  Interface      : ${YELLOW}${NET_IFACE}${RESET}"
 echo -e "  MTU            : ${YELLOW}${SERVER_MTU}${RESET}"
@@ -668,6 +766,7 @@ NET_IFACE="${NET_IFACE}"
 SERVER_MTU="${SERVER_MTU}"
 TUNNEL_MODE="${TUNNEL_MODE}"
 INSTALL_METHOD="${INSTALL_METHOD}"
+RECORD_TYPE="${RECORD_TYPE}"
 EOF
 chmod 640 "$CONFIG_FILE"
 
